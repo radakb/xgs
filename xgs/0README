@@ -1,0 +1,48 @@
+=======================
+Quick developer's guide
+=======================
+
+The core XGS routines are defined in xgs.core.tcl. These are not, by 
+themselves, enough to run a simulation. Instead the ::xgs namespace must be
+"completed" in order to define a specific method with a given parameter space. 
+In addition to new NAMD keywords, two main XGS commands are defined, each with
+different uses and requirements:
+
+------------------------------
+xgsRun requires the following:
+------------------------------
+
+::xgs::parameterSetup
+  Perform NAMD keyword setup specific to the method.
+
+::xgs::updateState oldIndex newIndex
+  Update the state parameters after a MC step. This should accept state 
+  indices for the old and new state (these may be the same) and update
+  the parameters (e.g. the thermostat temperature) accordingly.
+
+and at least one of:
+
+::xgs::computePairPotential oldIndex newIndex
+  Compute the (reduced) pair potential betwee two states. This is only needed
+  for neighbor sampling and is used in the Gibbs sampling procedure.
+
+::xgs::computeNormedWeights
+  Compute the normalized probability weights of _all_ states. This is only
+  needed for independence sampling methods.
+
+------------------------------------
+xgsCalibrate requires the following:
+------------------------------------
+
+::xgs::setupCalibration
+  Allocate a list for storing calibration data.
+
+::xgs::accumulateCalibration energyMeans index
+  Accumulate data for the calibration. This should accept the variable returned
+  by setupCalibration (e.g. a list or list of lists) and a state index and
+  update the elements accordingly (i.e. accumulate an average).
+
+::xgs::computeCalibration energyMeans
+  Accept the accumulated data and return an estimate of both the state weights
+  and the instantaneous work variance between neighboring states.
+
