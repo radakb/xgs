@@ -7,10 +7,14 @@
 package require Tcl 8.5
 
 source [file join [file dirname [info script]] "xgs.core.tcl"]
+source [file join [file dirname [info script]] "xgs.util.tcl"]
 
 namespace eval ::xgs {
     variable TYPE ST
-    namespace export stCalibrate
+    namespace import ::xgs::util::geometricTemperatures \
+            ::xgs::util::optimalTempCount ::xgs::util::optimalTempLadder
+    namespace export stCalibrate geometricTemperatures \
+            optimalTempCount optimalTempLadder
 }
 
 # Here we equate the instantaneous work fluctutations needed to change the
@@ -32,8 +36,15 @@ proc ::xgs::stCalibrate {numsteps {numEquilSteps 0}} {
         set alp [expr {$Tip1/$Ti}]
         set c [expr {$c + $alp*$var/($alp-1)**2}]
     }
-    set c [format "%.2e" $c]
-    xgsPrint "excess heat capacity (kB units) = $c"
+    set c [expr {$c / [llength $varList]}]
+    set Tmin [lindex $tempList 0]
+    set Tmax [lindex $tempList end]
+    set N [optimalTempCount $c $Tmin $Tmax]
+    set tladder [optimalTempLadder $c $Tmin $Tmax]
+    xgsPrint "Properties from linear response:"
+    xgsPrint [format "excess heat capacity (kB units) = %.2e" $c]
+    xgsPrint "optimal temperature count = $N"
+    xgsPrint "optimal temperature ladder = $tladder"
     return
 }
 

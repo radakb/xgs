@@ -9,12 +9,9 @@
 # greatly affect the sampling efficiency.
 #
 source [file join [file dirname [info script]] "xgs/xgs.st.tcl"]
-source [file join [file dirname [info script]] "xgs/xgs.util.tcl"]
 
 namespace eval ::st {
     namespace import ::xgs::*
-    namespace import ::xgs::util::geometricTemperatures \
-            ::xgs::util::optimalTempLadder
 
     rename xgsRun stRun
     rename xgsParamLadder stTempLadder
@@ -26,7 +23,7 @@ namespace eval ::st {
     namespace export stRun stCalibrate \
             stTempLadder stTempWeights stGibbsMethod \
             stRestartFile stRestartFreq \
-            geometricTemperatures optimalTempLadder
+            geometricTemperatures optimalTempCount optimalTempLadder
 }
 
 namespace import ::st::*

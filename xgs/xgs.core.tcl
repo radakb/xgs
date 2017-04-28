@@ -37,7 +37,8 @@ namespace eval ::xgs {
     variable restartFreq 0
 
     namespace export xgsRun xgsCalibrate\
-            xgsParamLadder xgsStateWeights xgsGibbsMethod xgsRestartFile
+            xgsParamLadder xgsStateWeights xgsGibbsMethod\
+            xgsRestartFile xgsRestartFreq
 }
 
 # Check that a proc is defined - this is used to make sure that a specific
