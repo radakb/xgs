@@ -75,6 +75,20 @@ proc lmultiply {list args} {
     return
 }
 
+# ldot
+#
+# Multiply a list (in place) by another list (i.e. take the dot product).
+#
+proc ldot {list1 list2} {
+    upvar 1 $list1 List1
+    set i 0
+    foreach item1 $List1 item2 $list2 {
+        lset List1 $i [expr {$item1*$item2}]
+        incr i
+    }
+    return
+}
+
 # =============================================================================
 # Probability, Statistics, and Random numbers
 # =============================================================================
@@ -139,3 +153,76 @@ proc weightedChoice {weights {weightSum {}}} {
     error "Something bad happened in weightedChoice!"
 }
 
+# linearFit
+#
+# Perform a (weighted) linear least squares fit.
+#
+proc linearFit {x y {yerr {}} {intrcpt {}}} {
+    if {[llength $x] != [llength $y]} {
+        error "The x and y lists are not of the same length!" 
+    }
+    set n [llength $x]
+    set dof [expr {$n - 2}]
+    if {[llength $yerr] == 0} {
+        set w [lrepeat $n 1.0]
+    } else {
+        set w [list]
+        foreach yerri $yerr {
+            lappend w [expr {1.0/$yerri}]
+        }
+    }
+    if {[llength $w] != $n} {
+        error "The x/y and weight lists are not of the same length!"
+    }
+    set fixed_intrcpt [expr {$intrcpt == "" ? 0 : 1}]
+    if {$fixed_intrcpt} {
+        llincr y [lrepeat $n [expr {-1*$intrcpt}]]
+        incr dof 1
+    }
+    # Normalize the data by the sample weights.
+    ldot x $w
+    ldot y $w
+    # Compute the covariance matrix elements.
+    set xmean [expr {lmean($x)}]
+    set ymean [expr {lmean($y)}]
+    set dx $x
+    set dy $y
+    llincr dx [lrepeat $n [expr {-1*$xmean}]]
+    llincr dy [lrepeat $n [expr {-1*$ymean}]]
+    set xvar 0.0
+    set yvar 0.0
+    set xyvar 0.0
+    foreach dxi $dx dyi $dy {
+        set xvar [expr {$xvar + $dxi**2}]
+        set yvar [expr {$yvar + $dyi**2}]
+        set xyvar [expr {$xyvar + $dxi*$dyi}]
+    }
+    set xvar [expr {$xvar / $n}]
+    set yvar [expr {$yvar / $n}]
+    set xyvar [expr {$xyvar / $n}] 
+    # Shift the data if the intercept is not being calculated.
+    if {$fixed_intrcpt} {
+        set xvar [expr {$xvar + $xmean**2}]
+        set yvar [expr {$yvar + $ymean**2}]
+        set xyvar [expr {$xyvar + $xmean*$ymean}]
+    }
+    set slp [expr {$xyvar / $xvar}]
+    # Compute the intercept if not already specified.
+    if {!$fixed_intrcpt} {
+        set intrcpt [expr {$ymean - $slp*$xmean}]
+    }
+    # Compute the correlation coefficient and parameter variances.
+    set R2 [expr {$xyvar**2 / ($xvar*$yvar)}]
+    set res_var 0.0
+    foreach xi $x yi $y {
+        set res_var [expr {$res_var + ($slp*$xi + $intrcpt - $yi)**2}] 
+    }
+    set res_var [expr {$res_var / $dof}]
+    ldot dx $dx
+    set slp_var [expr {$res_var / lsum($dx)}] ;# actually divide by dx**2
+    ldot x $x
+    set intrcpt_var [expr {$slp_var*lmean($x)}] ;# actually divide by x**2
+    set slp_err [expr {sqrt($slp_var/$dof)}]
+    set intrcpt_err [expr {sqrt($intrcpt_var/$dof)}]
+    return [list $slp $intrcpt $slp_err $intrcpt_err $R2]
+}

@@ -18,16 +18,15 @@ namespace eval ::xgs {
 }
 
 # Here we equate the instantaneous work fluctutations needed to change the
-# temperature with the heat capacity under the assumption that the latter is a
-# constant between neighboring temperatures. Further assuming that this is
-# constant over _all_ temperatures leads to a single estimate. This should
-# converge much faster than data from two temperatures, but still probably not
-# too well. In any event, even an estimate with 10% error should be pretty good
-# for determining an optimal temperature ladder (an error of roughly +/- 2 in
-# the ladder size).
+# temperature with the heat capacity (which is a constant between temperatures
+# within linear response). Further assuming that this is constant over _all_
+# temperatures leads to a single estimate. This should converge much faster
+# than data from two temperatures, but still probably not too well. In any
+# event, even an estimate with 10% error should be pretty good for determining
+# an optimal temperature ladder (an error of roughly +/- 2 in the ladder size).
 #
 proc ::xgs::stCalibrate {numsteps {numEquilSteps 0}} {
-    set varList [xgsCalibrate $numsteps $numEquilSteps]
+    lassign [xgsCalibrate $numsteps $numEquilSteps] weightList varList
     set tempList [getParams]
     set TiList [lrange $tempList 0 end-1]
     set Tip1List [lrange $tempList 1 end]
@@ -42,9 +41,9 @@ proc ::xgs::stCalibrate {numsteps {numEquilSteps 0}} {
     set N [optimalTempCount $c $Tmin $Tmax]
     set tladder [optimalTempLadder $c $Tmin $Tmax]
     xgsPrint "Properties from linear response:"
-    xgsPrint [format "excess heat capacity (kB units) = %.2e" $c]
-    xgsPrint "optimal temperature count = $N"
-    xgsPrint "optimal temperature ladder = $tladder"
+    xgsPrint [format "excess heat capacity (kB units): %.2e" $c]
+    xgsPrint "optimal temperature count: $N"
+    xgsPrint "optimal temperature ladder: $tladder"
     return
 }
 

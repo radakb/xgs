@@ -109,8 +109,10 @@ proc ::xgs::xgsRun {numsteps numcycles} {
 #
 # Returns:
 # --------
-# energyMeans : list
-#   Accumulated calibration data - may be useful for additional analysis
+# weights : list
+#   The estimated free energy weights for each state
+# variances : list
+#   The estimated work variances _between_ neighboring pairs of states
 #
 proc ::xgs::xgsCalibrate {numsteps {numEquilSteps 0}} {
     # Check that the necessary subroutines are defined.
@@ -163,7 +165,7 @@ proc ::xgs::xgsCalibrate {numsteps {numEquilSteps 0}} {
     xgsPrintEnergies $variances
     xgsPrint "Results written to XGS restart [outputname].xgsrst"
     writeRestart force "[outputname].xgsrst" 0
-    return $variances
+    return [list $weights $variances]
 }
 
 # =============================================================================
