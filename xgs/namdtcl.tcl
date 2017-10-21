@@ -145,10 +145,12 @@ proc checkArglistIsMultiple {argList multi} {
 # >> $::thermostatCmd off ;# turn off the termostat
 #
 # =============================================================================
+global thermostatIsSet 0
 global thermostatName ""
 global thermostatCmd ""
 global thermostatTempCmd ""
 
+global barostatIsSet 0
 global barostatName ""
 global barostatCmd ""
 global barostatPresCmd ""
@@ -164,6 +166,7 @@ global barostatTempCmd ""
 # Return 1 if a thermostat is set, else return 0.
 #
 proc getThermostat {{forbidBerendsen true}} {
+    global thermostatIsSet
     global thermostatName ""
     global thermostatCmd ""
     global thermostatTempCmd ""
@@ -189,9 +192,11 @@ proc getThermostat {{forbidBerendsen true}} {
             set thermostatTempCmd tCoupleTemp
         }
     } else {
-        return 0 
+        set thermostatIsSet 0 
+        return 0
     }
-    return 1
+    set thermostatIsSet 1
+    return 1 
 }
 
 # getBarostat
@@ -204,6 +209,7 @@ proc getThermostat {{forbidBerendsen true}} {
 # Return 1 if a barostat is set, else return 0.
 #
 proc getBarostat {{forbidBerendsen true}} {
+    global barostatIsSet
     global barostatName ""
     global barostatCmd ""
     global barostatPresCmd ""
@@ -223,9 +229,11 @@ proc getBarostat {{forbidBerendsen true}} {
             set barostatPresCmd berendsenPressureTarget
         }
     } else {
-        return 0 
+        set barostatIsSet 0
+        return 0
     }
-    return 1
+    set barostatIsSet 1
+    return 1 
 }
 
 # Alchemical Interactions

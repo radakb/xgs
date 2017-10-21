@@ -165,7 +165,7 @@ proc ::xgs::xgsCalibrate {numsteps {numEquilSteps 0}} {
     xgsPrintEnergies $variances
     xgsPrint "Results written to XGS restart [outputname].xgsrst"
     writeRestart force "[outputname].xgsrst" 0
-    return [list $weights $variances]
+    return [list $weights $variances $energyMeans]
 }
 
 # =============================================================================

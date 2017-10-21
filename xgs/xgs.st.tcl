@@ -26,22 +26,42 @@ namespace eval ::xgs {
 # an optimal temperature ladder (an error of roughly +/- 2 in the ladder size).
 #
 proc ::xgs::stCalibrate {numsteps {numEquilSteps 0}} {
-    lassign [xgsCalibrate $numsteps $numEquilSteps] weightList varList
+    lassign [xgsCalibrate $numsteps $numEquilSteps] \
+            weightList varList energyMeans
     set tempList [getParams]
     set TiList [lrange $tempList 0 end-1]
     set Tip1List [lrange $tempList 1 end]
-    set c 0.0
-    foreach var $varList Ti $TiList Tip1 $Tip1List {
-        set alp [expr {$Tip1/$Ti}]
-        set c [expr {$c + $alp*$var/($alp-1)**2}]
-    }
-    set c [expr {$c / [llength $varList]}]
     set Tmin [lindex $tempList 0]
     set Tmax [lindex $tempList end]
-    set N [optimalTempCount $c $Tmin $Tmax]
-    set tladder [optimalTempLadder $c $Tmin $Tmax]
+    # Compute the average heat capacity on each interval.
+    set c_mean 0.0
+    foreach var $varList Ti $TiList Tip1 $Tip1List {
+        set alp [expr {$Tip1/$Ti}]
+        set c_mean [expr {$c_mean + $alp*$var/($alp-1)**2}]
+    }
+    set c_mean [expr {$c_mean / [llength $varList]}]
+    # Try a linear fit to the temperature instead.
+    set kT [list]
+    foreach Ti $tempList {
+        lappend kT [expr {$::BOLTZMANN*$Ti}]
+    }
+    lassign [linearFit $kT $energyMeans] c_fit U0 c_err U0_err r2
+    set c_fit [expr {abs($c_fit)}]
+
+    set N [optimalTempCount $c_mean $Tmin $Tmax]
+    set tladder [optimalTempLadder $c_mean $Tmin $Tmax]
     xgsPrint "Properties from linear response:"
-    xgsPrint [format "excess heat capacity (kB units): %.2e" $c]
+    xgsPrint "Using mean numerical derivatives:"
+    xgsPrint [format "excess heat capacity (kB units): %.2e" $c_mean]
+    xgsPrint "optimal temperature count: $N"
+    xgsPrint "optimal temperature ladder: $tladder"
+    set N [optimalTempCount $c_fit $Tmin $Tmax]
+    set tladder [optimalTempLadder $c_fit $Tmin $Tmax]
+    xgsPrint [format "Using linear fit (r^2 = %5.3f):" $r2]
+    xgsPrint [format "excess heat capacity (kB units): %.2e +/- %.2e" $c_fit \
+            $c_err]
+    xgsPrint [format "internal energy/enthalpy (kcal/mol): % 11.4f +/- %6.4f" \
+            $U0 $U0_err]
     xgsPrint "optimal temperature count: $N"
     xgsPrint "optimal temperature ladder: $tladder"
     return
@@ -212,9 +232,9 @@ proc ::xgs::computeCalibration {energyMeans} {
     for {set i 1} {$i < [getNumStates]} {incr i} {
         set im1 [expr {$i-1}]
         set Tim1 [getParams $im1]
-        set Eim1 [lindex $energyMeans $im1 0]
+        set Eim1 [lindex $energyMeans $im1]
         set Ti [getParams $i]
-        set Ei [lindex $energyMeans $i 0]
+        set Ei [lindex $energyMeans $i]
         set dbeta [expr {($Tim1 - $Ti) / ($::BOLTZMANN*$Tim1*$Ti)}]
         set wim1 [lindex $weightList $im1]
         lset weightList $i [expr {$wim1 + 0.5*$dbeta*($Ei + $Eim1)}]

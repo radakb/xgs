@@ -31,46 +31,79 @@ namespace eval ::xgs {
 # NB: This depends on the direction of the perturbation.
 #
 proc ::xgs::alchCalibrate {numsteps {numEquilSteps 0}} {
-    lassign [xgsCalibrate $numsteps $numEquilSteps] weightList varList
+    lassign [xgsCalibrate $numsteps $numEquilSteps] \
+            weightList varList energyMeans
     set lambdaList [getParams]
     set liList [lrange $lambdaList 0 end-1]
     set lip1List [lrange $lambdaList 1 end] 
     set lmin [lindex $lambdaList 0]
     set lmax [lindex $lambdaList end]
     # Compute the average second derivative on each interval.
+    #
     set d2fdl2_mean 0.0
     foreach var $varList li $liList lip1 $lip1List { 
         set dl [expr {$lip1 - $li}]
         set d2fdl2_mean [expr {$d2fdl2_mean + $var/$dl**2}]
     }
-    set d2fdl2 [expr {$d2fdl2_mean / [llength $varList]}]
-    # Try a quadratic fit to the free energy instead. Note that state 0 is
-    # omitted, since this is _exactly_ 0.0.
-    # TODO: This assumes a specific curvature of the free energy.
+    set d2fdl2_mean [expr {$d2fdl2_mean / [llength $varList]}]
+
+    # Try a linear fit to du/dl instead.
+    #
+    set dudl [list]
+    foreach meanList $energyMeans {
+        set U1 [expr {lsum([lrange $meanList 0 2])}]
+        set U2 [expr {lsum([lrange $meanList 3 end])}]
+        set du [expr {($U1 - $U2) / ($::BOLTZMANN*[$::thermostatTempCmd])}]
+        lappend dudl $du
+    }
+    lassign [linearFit $lambdaList $dudl] d2fdl2_fit1 U0 d2fdl2_err1 U0_err R1
+    set d2fdl2_fit1 [expr {abs($d2fdl2_fit1)}]
+
+    # Can also try to the fit free energy directly as linearized quadratic.
+    # NB: The intercept is exactly 0.0 by construction - omit the reference
+    #   free energy at (0, 0) and constrain the fit.
+    #
     set x [list]
-    set err [list]
-    set i 2
-    foreach li $lip1List {
-        lappend x [expr {0.5*(1 - ($li - 1)**2)}]
-        lappend err [expr {sqrt($i)}]
-        incr i
+    if {[lindex $weightList end] < 0.0} { ;# for "charging" - dG < 0
+        foreach lambda [lrange $lambdaList 1 end] {
+            lappend x [expr {0.5*$lambda**2}]
+        }
+    } else { ;# for "decharging" - dG > 0
+        foreach lambda [lrange $lambdaList 1 end] {
+            lappend x [expr {0.5*(1 - (1 - $lambda)**2)}]
+        }
     }
     set y [lrange $weightList 1 end]
-    lassign [linearFit $x $y $err 0.0] d2fdl2_fit tmp d2fdl2_err tmp_err r2
+    set y_err [lrepeat [llength $y] 1.0] ;# dummy values for weighted fit
+    lassign [linearFit $x $y $y_err 0.0] d2fdl2_fit2 tmp d2fdl2_err2 tmp_err R2
+    set d2fdl2_fit2 [expr {abs($d2fdl2_fit2)}]
+
+    # Report ladders for each estimate above.
+    #
     set N [optimalLambdaCount $d2fdl2_mean $lmin $lmax]
     set lladder [optimalLambdaLadder $d2fdl2_mean $lmin $lmax]
     xgsPrint "Properties from linear response:"
     xgsPrint "Using mean numerical derivative:"
-    xgsPrint [format "df2dl2 (abs. value, kBT units): %11.4f" $d2fdl2_mean]
+    xgsPrint [format "|d2f/dl2| (kBT units): %11.4f" $d2fdl2_mean]
     xgsPrint "optimal lambda count: $N"
     xgsPrint "optimal lambda ladder: $lladder"
-    set N [optimalLambdaCount $d2fdl2_fit $lmin $lmax]
-    set lladder [optimalLambdaLadder $d2fdl2_fit $lmin $lmax]
-    xgsPrint [format "Using linear fit to weights (r^2 = %5.3f):" $r2]
-    xgsPrint [format "df2dl2 (abs. value, kBT units): %11.4f +/- %11.4f" \
-            $d2fdl2_fit $d2fdl2_err]
+    set N [optimalLambdaCount $d2fdl2_fit1 $lmin $lmax]
+    set lladder [optimalLambdaLadder $d2fdl2_fit1 $lmin $lmax]
+    xgsPrint [format "Using linear fit to dU/dlambda (r^2 = %5.3f):" $R1]
+    xgsPrint [format "|d2f/dl2| (kBT units): %11.4f +/- %11.4f" \
+           $d2fdl2_fit1 $d2fdl2_err1]
+    xgsPrint [format "intercept: %11.4f +/- %11.4f" $U0 $U0_err]
     xgsPrint "optimal lambda count: $N"
     xgsPrint "optimal lambda ladder: $lladder"
+    set N [optimalLambdaCount $d2fdl2_fit2 $lmin $lmax]
+    set lladder [optimalLambdaLadder $d2fdl2_fit2 $lmin $lmax]
+    xgsPrint [format "Using linearized fit to weights (r^2 = %5.3f):" $R2]
+    xgsPrint [format "|d2f/dl2| (kBT units): %11.4f +/- %11.4f" \
+           $d2fdl2_fit2 $d2fdl2_err2]
+    xgsPrint [format "(fixed) intercept: %11.4f +/- %11.4f" $tmp $tmp_err]
+    xgsPrint "optimal lambda count: $N"
+    xgsPrint "optimal lambda ladder: $lladder"
+    return
 }
 
 # =============================================================================
