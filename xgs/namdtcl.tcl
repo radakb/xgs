@@ -275,6 +275,16 @@ proc getBondLambda {lambda} {
     return [expr {($lambda >= $le) ? 1. : [expr {$lambda / $le}]}]
 }
 
+# These are analogues for internal variables in NAMD.
+#
+proc alchFepOn {} {
+    return [string match -nocase [alchType] "FEP"]
+}
+
+proc alchThermIntOn {} {
+    return [string match -nocase [alchType] "TI"]
+}
+
 # Return the alchemical energy components in the same list structure used by
 # getLambdas. Note that energyArray should be passed _by name_, not by value.
 #
@@ -285,8 +295,17 @@ proc getBondLambda {lambda} {
 # 
 proc getAlchEnergies {energyArray} {
     upvar 1 $energyArray energies
-    return [list $energies(BOND1) $energies(ELEC1) $energies(VDW1)\
-                 $energies(BOND2) $energies(ELEC2) $energies(VDW2)\
-           ]
+    if {[alchThermIntOn]} {
+        set etitleList {BOND1 ELEC1 VDW1 BOND2 ELEC2 VDW2}
+    } elseif {[alchFepOn]} {
+        set etitleList {BOND ELECT VDW BOND2 ELEC2 VDW2}
+    } else {
+        abort "Error in callback retrieval of alchemical energies"
+    }
+    set alchEnergies [list]
+    foreach etitle $etitleList {
+        lappend alchEnergies $energies($etitle)
+    }
+    return $alchEnergies
 }
 

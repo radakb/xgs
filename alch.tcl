@@ -7,7 +7,6 @@ source [file join [file dirname [info script]] "xgs/xgs.alch.tcl"]
 
 namespace eval ::alch {
     namespace import ::xgs::*
-    rename xgsRun alchRun
     rename xgsParamLadder alchLambdaLadder
     rename xgsStateWeights alchLambdaWeights
     rename xgsGibbsMethod alchGibbsMethod
@@ -15,7 +14,7 @@ namespace eval ::alch {
 
     namespace export alchRun alchCalibrate\
             alchLambdaLadder alchLambdaWeights alchGibbsMethod\
-            alchRestartFile
+            alchRestartFile alchOptimalLambdaCount alchOptimalLambdaLadder
 }
 
 namespace import ::alch::*

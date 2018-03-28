@@ -92,6 +92,48 @@ proc ldot {list1 list2} {
 # =============================================================================
 # Probability, Statistics, and Random numbers
 # =============================================================================
+# tcl::mathfunc::uniform
+#
+# Generate a uniform random variable on the range [a, b).
+#
+# If only one argument is given, the range is [0, a) instead.
+#
+proc tcl::mathfunc::uniform {{a 1.0} {b ""}} {
+    if {[string match $b ""]} {
+        set b [expr {$a + 0.0}]
+        set a 0.0
+    }
+    if {$a == $b} {
+        return $a
+    }
+    if {$a > $b} {
+        set tmp $a
+        set a $b
+        set b $tmp
+    }
+    expr {$a + ($b - $a)*rand()}
+}
+
+# tcl::mathfunc::randint
+#
+# Generate a random integer on the range [a, b].
+#
+proc tcl::mathfunc::randint {a b} {
+    set a [expr {int($a)}]
+    set b [expr {int($b)}]
+    if {$a == $b} {
+        return $a
+    }
+    if {$a > $b} {
+        set tmp $a
+        set a $b
+        set b $tmp
+    }
+    expr {$a + int(($b - $a + 1)*uniform())}
+}
+
+# tcl::mathfunc::normal
+#
 # Generate a Gaussian (normal) random variable with the given mean and standard
 # deviation (default to zero and one, respectively). 
 #
@@ -100,8 +142,8 @@ proc ldot {list1 list2} {
 #
 proc tcl::mathfunc::normal {{mu 0.0} {sigma 1.0}} {
     set two_pi [expr {2*3.141592653589793}]
-    set u1 [expr {rand()}]
-    set u2 [expr {rand()}]
+    set u1 [expr {uniform()}]
+    set u2 [expr {uniform()}]
     # The transformation produces two random variates - either of these can be
     # used (or both).
     expr {$mu + $sigma*sqrt(-2*log($u1))*cos($two_pi*$u2)}
@@ -118,7 +160,7 @@ proc tcl::mathfunc::normal {{mu 0.0} {sigma 1.0}} {
 #    list to choose an element from
 #
 proc choice {list} {
-    return [lindex $list [expr {int(rand()*[llength $list])}]]
+    return [lindex $list [expr {randint(0, [expr {[llength $list] - 1}])}]]
 }
 
 # weightedChoice
@@ -140,7 +182,7 @@ proc weightedChoice {weights {weightSum {}}} {
     } else {
         set WeightSum [expr {lsum($weights)}]
     }
-    set Rand [expr {$WeightSum*rand()}]
+    set Rand [expr {uniform($WeightSum)}]
     set j 0
     foreach Weight $weights {
         set Rand [expr {$Rand - $Weight}]

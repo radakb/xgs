@@ -22,8 +22,7 @@ namespace eval ::st {
 
     namespace export stRun stCalibrate \
             stTempLadder stTempWeights stGibbsMethod \
-            stRestartFile stRestartFreq \
-            geometricTemperatures optimalTempCount optimalTempLadder
+            stRestartFile stRestartFreq stOptimalTempCount stOptimalTempLadder
 }
 
 namespace import ::st::*

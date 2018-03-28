@@ -11,10 +11,21 @@ source [file join [file dirname [info script]] "xgs.util.tcl"]
 
 namespace eval ::xgs {
     variable TYPE ST
-    namespace import ::xgs::util::geometricTemperatures \
-            ::xgs::util::optimalTempCount ::xgs::util::optimalTempLadder
-    namespace export stCalibrate geometricTemperatures \
-            optimalTempCount optimalTempLadder
+    namespace import ::xgs::util::optimalTempCount\
+            ::xgs::util::optimalTempLadder
+    namespace export stCalibrate stOptimalTempCount stOptimalTempLadder
+}
+
+# Wrapper to use selected Gibbs method
+proc ::xgs::stOptimalTempCount {heatCapacity Tmin Tmax} {
+    variable ::xgs::GibbsMethodName
+    return [optimalTempCount $heatCapacity $Tmin $Tmax $GibbsMethodName]
+}
+
+# Wrapper to use selected Gibbs method
+proc ::xgs::stOptimalTempLadder {heatCapacity Tmin Tmax {prec 1}} {
+    variable ::xgs::GibbsMethodName
+    return [optimalTempLadder $heatCapacity $Tmin $Tmax $GibbsMethodName $prec]
 }
 
 # Here we equate the instantaneous work fluctutations needed to change the
@@ -48,22 +59,22 @@ proc ::xgs::stCalibrate {numsteps {numEquilSteps 0}} {
     lassign [linearFit $kT $energyMeans] c_fit U0 c_err U0_err r2
     set c_fit [expr {abs($c_fit)}]
 
-    set N [optimalTempCount $c_mean $Tmin $Tmax]
-    set tladder [optimalTempLadder $c_mean $Tmin $Tmax]
     xgsPrint "Properties from linear response:"
+    set M [stOptimalTempCount $c_mean $Tmin $Tmax]
+    set tladder [stOptimalTempLadder $c_mean $Tmin $Tmax]
     xgsPrint "Using mean numerical derivatives:"
     xgsPrint [format "excess heat capacity (kB units): %.2e" $c_mean]
-    xgsPrint "optimal temperature count: $N"
-    xgsPrint "optimal temperature ladder: $tladder"
-    set N [optimalTempCount $c_fit $Tmin $Tmax]
-    set tladder [optimalTempLadder $c_fit $Tmin $Tmax]
+    xgsPrint "optimal temperature count: $M" 
+    xgsPrint "optimal temperature ladder: $tladder" 
+    set M [stOptimalTempCount $c_fit $Tmin $Tmax]
+    set tladder [stOptimalTempLadder $c_fit $Tmin $Tmax]
     xgsPrint [format "Using linear fit (r^2 = %5.3f):" $r2]
     xgsPrint [format "excess heat capacity (kB units): %.2e +/- %.2e" $c_fit \
             $c_err]
     xgsPrint [format "internal energy/enthalpy (kcal/mol): % 11.4f +/- %6.4f" \
             $U0 $U0_err]
-    xgsPrint "optimal temperature count: $N"
-    xgsPrint "optimal temperature ladder: $tladder"
+    xgsPrint "optimal temperature count: $M" 
+    xgsPrint "optimal temperature ladder: $tladder" 
     return
 }
 

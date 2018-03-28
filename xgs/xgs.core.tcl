@@ -28,10 +28,12 @@ namespace eval ::xgs {
     # and current state index are stored separately (see xgsSetup).
     variable initialStateIndex -1
     variable stateIndex -1
+    # For history dependent neighbor schemes
+    variable stepIncr
+    variable prevAxis -1
     # Type of Gibbs sampling protocol to use.
     variable GibbsMethodName "metropolized"
     variable GibbsSamplingCmd
-    variable ConstPresOn
     # Information for reading/writing restart files.
     variable restartFilename ""
     variable restartFreq 0
@@ -197,12 +199,14 @@ proc ::xgs::xgsGibbsMethod {methodName} {
 proc ::xgs::xgsParamLadder {args} {
     variable ::xgs::ParamLadder [list]
     variable ::xgs::ParamDims
+    variable ::xgs::stepIncr
     set dim [llength $args]
     if {$dim == 1} {
-        set ParamDims [llength $args]
+        set ParamDims 0
         foreach param {*}$args {
             checkIsNumeric xgsParamLadder $param
             lappend ParamLadder $param
+            incr ParamDims
         }
     } elseif {$dim == 2} {
         set ParamDims [list]
@@ -220,6 +224,7 @@ proc ::xgs::xgsParamLadder {args} {
         xgsAbort "Parameter spaces higher than 2 dimensions are not currently"\
                  "supported."
     }
+    set stepIncr [lrepeat $dim 1]
     return
 }
 
@@ -399,9 +404,10 @@ proc ::xgs::readRestart {restartFilename} {
 # =============================================================================
 # Gibbs Sampling Routines 
 # =============================================================================
-# ::xgs::neighborSampling
+# ::xgs::stochasticNeighborSampling
 #
-# Propose and accept/reject a change to a neighboring state.
+# Propose and accept/reject a change to a neighboring state. The candidate
+# state is chosen randomly amongst neighbors.
 #
 # Arguments:
 # ----------
@@ -413,44 +419,114 @@ proc ::xgs::readRestart {restartFilename} {
 # newIndex : int
 #   The new state index after the Metropolis accept/reject step
 # 
-proc ::xgs::neighborSampling {oldIndex} {
+proc ::xgs::stochasticNeighborSampling {oldIndex} {
+    set step [expr {int(pow(-1, randint(0, 1)))}]
+    set axis [expr {randint(0, [expr {[getNumDims] - 1}])}]
+    return [neighborSampling $oldIndex $step $axis]
+}
+
+# ::xgs::deterministicNeighborSampling
+#
+# Propose and accept/reject a change to a neighboring state. The candidate is
+# chosen by a deterministic up/down sequence where the direction changes when
+# a proposal is rejected.
+#
+# Arguments:
+# ----------
+# oldIndex : int
+#   The index of the current state in the lambda ladder
+#
+# Returns:
+# --------
+# newIndex : int
+#   The new state index after the Metropolis accept/reject step
+# 
+proc ::xgs::deterministicNeighborSampling {oldIndex} {
+    variable ::xgs::prevAxis
+    incr prevAxis
+    set prevAxis [expr {($prevAxis == [getNumDims]) ? 0 : $prevAxis}]
+    set axis $prevAxis
+    set step [lindex $::xgs::stepIncr $axis]
+    return [neighborSampling $oldIndex $step $axis]
+}
+
+# ::xgs::convectiveNeighborSampling
+#
+# Propose and accept/reject a change to a neighboring state. The candidate is
+# always driven towards the next endpoint.
+#
+# Arguments:
+# ----------
+# oldIndex : int
+#   The index of the current state in the lambda ladder
+#
+# Returns:
+# --------
+# newIndex : int
+#   The new state index after the Metropolis accept/reject step
+# 
+proc ::xgs::convectiveNeighborSampling {oldIndex} {
+    return [deterministicNeighborSampling $oldIndex]
+}
+
+# ::xgs::neighborSampling
+#
+# Propose and accept/reject a change to a neighboring state.
+#
+# Arguments:
+# ----------
+# oldIndex : int
+#   The index of the current state in the lambda ladder
+# step : int
+#   The step size and direction of the new neighbor
+# axis : int
+#   The (if applicable) parameter axis to find a neighbor on
+#
+# Returns:
+# --------
+# newIndex : int
+#   The new state index after the Metropolis accept/reject step
+# 
+proc ::xgs::neighborSampling {oldIndex step axis} {
     # For now, 1 and 2D are treated separately - it might be fairly easy to
     # generalize to d dimensions, but not today...
     set du 0.0
-    set step [expr {int(pow(-1, round(rand())))}]
-    if {[getNumDims] == 1} {
-        set newIndex [expr {$oldIndex + $step}]
-        set tmpIndex [correctForBoundary $newIndex [getNumStates]]
-        if {$newIndex != $tmpIndex} {
-            set newIndex $tmpIndex
-            set du $::LN2
-        }
-    } elseif {[getNumDims] == 2} {
-        set axis [expr {round(rand())}]
-        lassign [getParamDim] Ni Nj
-        set oldi [expr {$oldIndex % $Ni}]
-        set oldj [expr {$oldi / $Ni}]
-        if {$axis == 0} {
-            set newi [expr {$oldi + $step}]
-            set tmpi [correctForBoundary $newi $Ni]
-            if {$newi != $tmpi} {
-                set newi $tmpi
+    switch -- [getNumDims] {
+        1 {
+            set newIndex [expr {$oldIndex + $step}]
+            set tmpIndex [correctForBoundary $newIndex [getNumStates]]
+            if {$newIndex != $tmpIndex} {
+                set newIndex $tmpIndex
                 set du $::LN2
             }
-            set newIndex [expr {$oldj*$Ni + $newi}]
-        } elseif {$axis == 1} {
-            set newj [expr {$oldj + $step}]
-            set tmpj [correctForBoundary $newj $Nj]
-            if {$newj != $tmpj} {
-                set newj $tmpj
-                set du $::LN2
-            }
-            set newIndex [expr {$newj*$Ni + $oldi}] 
-        } else {
-            xgsAbort "Something bad happened when choosing a parameter axis"
         }
-    } else {
-        xgsAbort "Bad parameter dimensions! [getNumDims], expected 1 or 2"
+        2 {
+            lassign [getParamDim] N0 N1
+            set oldi [expr {$oldIndex % $N0}]
+            set oldj [expr {$oldi / $N0}]
+            if {$axis == 0} {
+                set newi [expr {$oldi + $step}]
+                set tmpi [correctForBoundary $newi $N0]
+                if {$newi != $tmpi} {
+                    set newi $tmpi
+                    set du $::LN2
+                }
+                set newIndex [expr {$oldj*$N0 + $newi}]
+            } elseif {$axis == 1} {
+                set newj [expr {$oldj + $step}]
+                set tmpj [correctForBoundary $newj $N1]
+                if {$newj != $tmpj} {
+                    set newj $tmpj
+                    set du $::LN2
+                }
+                set newIndex [expr {$newj*$N0 + $oldi}]
+            } else {
+                xgsAbort "Error when choosing a parameter axis"
+            }
+        }
+        default {
+            xgsAbort "Bad parameter dimensions! [getNumDims], expected 1 or 2"
+        }
     }
     storeEnergies
     set du [expr {$du + [computePairPotential $oldIndex $newIndex]}]
@@ -548,7 +624,6 @@ proc ::xgs::xgsSetup {} {
     variable ::xgs::StateWeights
     variable ::xgs::GibbsMethodName
     variable ::xgs::GibbsSamplingCmd
-    variable ::xgs::ConstPresOn
     variable ::xgs::restartFilename
     variable ::xgs::initialStateIndex
 
@@ -584,10 +659,20 @@ proc ::xgs::xgsSetup {} {
     }
     # Select the Gibbs sampling routine.
     #
-    switch -- $GibbsMethodName {
-        "neighbor" {
-            xgsPrint "Using nearest neighbor sampling"
-            set GibbsSamplingCmd neighborSampling
+    switch -- [string tolower $GibbsMethodName] {
+        "stochastic-neighbor" {
+            xgsPrint "Using stochastic nearest neighbor sampling"
+            set GibbsSamplingCmd stochasticNeighborSampling
+            set GibbsWeightCmd computePairPotential
+        }
+        "deterministic-neighbor" {
+            xgsPrint "Using deterministic nearest neighbor sampling"
+            set GibbsSamplingCmd deterministicNeighborSampling
+            set GibbsWeightCmd computePairPotential
+        }
+        "convective-neighbor" {
+            xgsPrint "Using convective nearest neighbor sampling"
+            set GibbsSamplingCmd convectiveNeighborSampling
             set GibbsWeightCmd computePairPotential
         }
         "metropolized" {
@@ -608,13 +693,13 @@ proc ::xgs::xgsSetup {} {
     }
     # Select the thermostat temperature to be used for MC.
     #
-    set constTemp [getThermostat]
-    if {!$constTemp} {
-        xgsAbort "A thermostat is required"
+    getThermostat
+    if {!$::thermostatIsSet} { 
+       xgsAbort "A thermostat is required"
     }
     xgsPrint "Using $::thermostatName thermostat"
-    set ConstPresOn [getBarostat]
-    if {$ConstPresOn} {
+    getBarostat
+    if {$::barostatIsSet} {
         xgsPrint "Using $::barostatName barostat"
     }
 
@@ -646,6 +731,10 @@ proc ::xgs::xgsSetup {} {
 #   The current index (will be either oldIndex or newIndex)
 #
 proc ::xgs::reportAndUpdate {du oldIndex newIndex} {
+    variable ::xgs::GibbsMethodName
+    variable ::xgs::stepIncr
+    variable ::xgs::prevAxis
+
     if {$oldIndex != $newIndex} {
         set oldParam [getParams $oldIndex]
         set newParam [getParams $newIndex]
@@ -657,9 +746,41 @@ proc ::xgs::reportAndUpdate {du oldIndex newIndex} {
         set accept 0
         xgsPrint "no exchange"
     }
+
+    set prevIncr [lindex $stepIncr $prevAxis]
     if {$accept} {
         updateState $oldIndex $newIndex
         setStateIndex $newIndex
+        # This is only needed for history dependent neighbor sampling
+        if {[string match -nocase $GibbsMethodName "convective-neighbor"]} {
+            # prevIncr is 1 if we are trying to hit the upper endpoint and -1
+            # if we are trying to hit the lower endpoint on this axis.
+            lassign [getParamDim] N0
+            set hit 0
+            if {$prevAxis == 0} {
+                if {$prevIncr == 1 && ![expr {($newIndex+1)%$N0}]} {
+                    set hit 1
+                } elseif {$prevIncr == -1 && ![expr {$newIndex%$N0}]} {
+                    set hit 1
+                }
+            } elseif {$prevAxis == 1} {
+                # WARNING! THIS IS ONLY CORRECT FOR 2 OR FEWER DIMENSIONS!
+                if {$prevIncr == 1 
+                    && [expr {$newIndex + $N0}] >= [getNumStates]} {
+                    set hit 1
+                } elseif {$prevIncr == -1 && $newIndex < $N0} { 
+                    set hit 1
+                }
+            }
+            if {$hit} {
+                lset stepIncr $prevAxis [expr {-1*$prevIncr}]
+            }
+        }
+    } else {
+        # This is only needed for history dependent neighbor sampling
+        if {[string match -nocase $GibbsMethodName "deterministic-neighbor"]} { 
+            lset stepIncr $prevAxis [expr {-1*$prevIncr}]
+        }
     }
     return [list [getStateIndex] $accept]
 }
@@ -674,7 +795,7 @@ proc ::xgs::reportAndUpdate {du oldIndex newIndex} {
 proc ::xgs::setStateIndex {index} {
     if {$index < 0 || [getNumStates] <= $index} {
         xgsAbort "Invalid state index $index, must be in range"\
-                 "\[0, [getNumStates]."
+                 "\[0, [getNumStates]\)."
     }
     variable ::xgs::stateIndex $index
     return
@@ -686,8 +807,8 @@ proc ::xgs::setStateIndex {index} {
 #
 proc ::xgs::setTemp {newTemp} {
     $::thermostatTempCmd $newTemp
-    if {[constPresOn] && [$::barostatCmd]} {
-        if {[string length $::barostatTempCmd]} {
+    if {$::barostatIsSet && [$::barostatCmd]} {
+        if {[string length $::barostatTempCmd] > 0} {
             $::barostatTempCmd $newTemp
         }
     }
@@ -808,10 +929,3 @@ proc ::xgs::getNumDims {} {
     return [llength $::xgs::ParamDims]
 }
 
-# ::xgs::constPresOn
-#
-# Return yes/no for a barostat being used.
-#
-proc ::xgs::constPresOn {} {
-    return $::xgs::ConstPresOn
-}
