@@ -320,7 +320,7 @@ proc ::xgs::setupCalibration {} {
 # 
 proc ::xgs::accumulateCalibration {energyMeans index} {
     upvar 1 $energyMeans EnergyMeans
-    llincr EnergyMeans $index [getAlchEnergies ::energyArray]
+    lincr EnergyMeans $index [getAlchEnergies ::energyArray]
     return
 }
 

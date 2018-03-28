@@ -591,8 +591,7 @@ proc ::xgs::metropolizedSampling {oldIndex {tol 1e-3}} {
         set du 0.0
     } else {
         lset Weights $oldIndex 0.0
-        set newIndex [weightedChoice $Weights $pic]
-        set pj [lindex $Weights $newIndex]
+        lassign [choice $Weights $Weights] pj newIndex
         set du [expr {log((1. - $pj) / $pic)}]
     }
     return [reportAndUpdate $du $oldIndex $newIndex]

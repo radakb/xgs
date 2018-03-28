@@ -32,61 +32,116 @@ proc tcl::mathfunc::lmean {list} {
 
 # lincr
 #
-# Increment an element of a list by the given value.
-# Indexing uses the standard syntax for nested lists, similar to lindex.
+# Increment a list (in place) by the given value. The modified list is also
+# returned.
 #
+# - This supports the standard lindex syntax for nested lists (ala lindex).
+# - NumPy style "broadcasting" is also supported, whereby a list plus a value
+#   results in each element of the list being incremented and a list plus a
+#   list results in element by element addition.
+#   NB: This only works left to right (ala +=) and modifies the left list.
+#
+# Example:
+#
+# % set foo {0 2 1 7 3}
+# % lincr foo 2
+# 2 4 3 9 5
+# % lincr foo {0 1 2 3 4}
+# 2 5 5 12 9
+#
+# % set bar {0 1 {2 3 4} 5}
+# % lincr bar 2 1
+# 0 1 {3 4 5} 5
+# % lincr bar 2 1 1
+# 0 1 {3 5 5} 5
+# 
 proc lincr {list args} {
     upvar 1 $list List
     set value [lindex $args end]
     set index [lrange $args 0 end-1]
-    lset List {*}$index [expr {[lindex $List {*}$index] + $value}]
-    return
-}
+    
+    set target [lindex $List {*}$index]
+    set vlen [llength $value]
+    set tlen [llength $target]
 
-# llincr
-#
-# Increment each element of list1 by the elements in list2.
-#
-proc llincr {list1 args} {
-    upvar 1 $list1 List1
-    set list2 [lindex $args end]
-    set index [lrange $args 0 end-1]
-    set i 0
-    foreach item1 [lindex $List1 {*}$index] item2 $list2 {
-        lset List1 {*}$index $i [expr {$item1 + $item2}]
-        incr i
+    if {$vlen == 1} {
+        if {$tlen == 1} {
+            # increment a single element by a single value
+            lset List {*}$index [expr {$target + $value}]
+        } elseif {$tlen > 1} {
+            # increment a each element in a list by a single value
+            set i 0 
+            foreach item $target {
+                if {[llength $item] != 1} {
+                    error "lincr encountered a nested list during list + value\
+                            operation"
+                }
+                lset List {*}$index $i [expr {$item + $value}]
+                incr i
+            }
+        }
+    } elseif {$vlen > 1} {
+        if {$tlen != $vlen} {
+            error "lincr cannot perform list + list operation with different\
+                    lengths ($tlen != $vlen)"
+        }
+        set i 0
+        foreach item1 $target item2 $value {
+            lset List {*}$index $i [expr {$item1 + $item2}]
+            incr i
+        }
     }
-    return
+    return $List
 }
 
 # lmultiply
 #
-# Multiple each element of a list by the given value.
+# Multiple a list (in place) by the given value. The modified list is also
+# returned.
+#
+# - This supports the standard lindex syntax for nested lists (ala lindex).
+# - NumPy style "broadcasting" is also supported, whereby a list times a value
+#   results in each element of the list being multiplied and a list times a
+#   list results in element by element multiplication.
+#   NB: This only works left to right (ala *=) and modifies the left list.
 #
 proc lmultiply {list args} {
     upvar 1 $list List
     set value [lindex $args end]
     set index [lrange $args 0 end-1]
-    set i 0
-    foreach item [lindex $List {*}$index] {
-        lset List {*}$index $i [expr {$item*$value}]
-        incr i
-    }
-    return
-}
 
-# ldot
-#
-# Multiply a list (in place) by another list (i.e. take the dot product).
-#
-proc ldot {list1 list2} {
-    upvar 1 $list1 List1
-    set i 0
-    foreach item1 $List1 item2 $list2 {
-        lset List1 $i [expr {$item1*$item2}]
-        incr i
+    set target [lindex $List {*}$index]
+    set vlen [llength $value]
+    set tlen [llength $target]
+
+    if {$vlen == 1} {
+        if {$tlen == 1} {
+            # increment a single element by a single value
+            lset List {*}$index [expr {$target*$value}]
+        } elseif {$tlen > 1} {
+            # increment a each element in a list by a single value
+            set i 0
+            foreach item $target {
+                if {[llength $item] != 1} {
+                    error "lmultiply encountered a nested list during list *\
+                            value operation"
+                }
+                lset List {*}$index $i [expr {$item*$value}]
+                incr i
+            }
+        }
+    } elseif {$vlen > 1} {
+        if {$tlen != $vlen} {
+            error "lmultiply cannot perform list * list operation with\
+                    different lengths ($tlen != $vlen)"
+        }
+        set i 0
+        foreach item1 $target item2 $value {
+            lset List {*}$index $i [expr {$item1*$item2}]
+            incr i
+        }
     }
-    return
+    return $List
 }
 
 # =============================================================================
@@ -152,56 +207,81 @@ proc tcl::mathfunc::normal {{mu 0.0} {sigma 1.0}} {
 
 # choice
 #
-# Choose a random element from a list with equal probability.
+# Choose a random element from a list. The index of the element is also
+# returned.
+#
+# The default is to uniformly weight the elements, but (unnormalized)
+# non-uniform weights may also be provided.
 #
 # Arguments:
 # ----------
 # list : list
-#    list to choose an element from
-#
-proc choice {list} {
-    return [lindex $list [expr {randint(0, [expr {[llength $list] - 1}])}]]
-}
-
-# weightedChoice
-#
-# Given a set of probability weights, return the index of a given outcome with 
-# the correct probability.
-#
-# Arguments:
-# ----------
-# weights : list of floats
+#   list to choose an element from
+# weights : list of floats (optional)
 #   The probability weight of each choice. These need not be normalized.
-# weightSum : float (optional, calculated if not specified)
-#   The sum of all entries in weights. This will not function correctly if this
-#   is incorrectly specified!
 #
-proc weightedChoice {weights {weightSum {}}} {
-    if {[llength $weightSum]} {
-        set WeightSum $weightSum
-    } else {
-        set WeightSum [expr {lsum($weights)}]
+# Returns:
+# --------
+# element
+#   the selected list element
+# index : int
+#   the index of the selected element
+#
+proc choice {list {weights {}}} {
+    # Uniform weights is really easy.
+    if {![llength $weights]} {
+        set j [expr {int(rand()*[llength $list])}]
+        return [list [lindex $list $j] $j]
     }
-    set Rand [expr {uniform($WeightSum)}]
+    # Non-uniform weighting is more involved.
+    if {[llength $list] != [llength $weights]} {
+        error "Mismatch in list/weights in choice!"
+    }
+    set WeightSum [expr {lsum($weights)}]
+    set Rand [expr {$WeightSum*rand()}]
     set j 0
     foreach Weight $weights {
         set Rand [expr {$Rand - $Weight}]
         if {$Rand <= 0.0} {
-            return $j
+            return [list [lindex $list $j] $j]
         }
         incr j
     }
     # This should never be reached.
-    error "Something bad happened in weightedChoice!"
+    error "Something bad happened in choice!"
 }
 
 # linearFit
 #
-# Perform a (weighted) linear least squares fit.
+# Perform a (possibly weighted) linear least squares fit.
+#
+# Arguments:
+# ----------
+# x : list
+#   the x-values to fit (must be same size as y)
+# y : list
+#   the y-values to fit (must be same size as x)
+# yerr : list (optional)
+#   uncertainty in y, will be used as inverse weights if specified
+# intrcpt : float (optional)
+#   the fixed y-intercept to use during fitting
+#
+# Returns:
+# --------
+# slp : float
+#   the fitted slope
+# intrcpt : float
+#   the fitted (or fixed) intercept
+# slp_err : float
+#   the uncertainty in the slope
+# intrcpt_err : float
+#   the uncertainty in the intercept (non-zero even for fixed slope)
+# R2 : float
+#   the squared coefficient of regression
 #
 proc linearFit {x y {yerr {}} {intrcpt {}}} {
     if {[llength $x] != [llength $y]} {
-        error "The x and y lists are not of the same length!" 
+        error "The x and y lists are not of the same length!"
     }
     set n [llength $x]
     set dof [expr {$n - 2}]
@@ -218,19 +298,19 @@ proc linearFit {x y {yerr {}} {intrcpt {}}} {
     }
     set fixed_intrcpt [expr {$intrcpt == "" ? 0 : 1}]
     if {$fixed_intrcpt} {
-        llincr y [lrepeat $n [expr {-1*$intrcpt}]]
+        lincr y [lrepeat $n [expr {-1*$intrcpt}]]
         incr dof 1
     }
     # Normalize the data by the sample weights.
-    ldot x $w
-    ldot y $w
+    lmultiply x $w
+    lmultiply y $w
     # Compute the covariance matrix elements.
     set xmean [expr {lmean($x)}]
     set ymean [expr {lmean($y)}]
     set dx $x
     set dy $y
-    llincr dx [lrepeat $n [expr {-1*$xmean}]]
-    llincr dy [lrepeat $n [expr {-1*$ymean}]]
+    lincr dx [lrepeat $n [expr {-1*$xmean}]]
+    lincr dy [lrepeat $n [expr {-1*$ymean}]]
     set xvar 0.0
     set yvar 0.0
     set xyvar 0.0
@@ -241,7 +321,7 @@ proc linearFit {x y {yerr {}} {intrcpt {}}} {
     }
     set xvar [expr {$xvar / $n}]
     set yvar [expr {$yvar / $n}]
-    set xyvar [expr {$xyvar / $n}] 
+    set xyvar [expr {$xyvar / $n}]
     # Shift the data if the intercept is not being calculated.
     if {$fixed_intrcpt} {
         set xvar [expr {$xvar + $xmean**2}]
@@ -257,14 +337,15 @@ proc linearFit {x y {yerr {}} {intrcpt {}}} {
     set R2 [expr {$xyvar**2 / ($xvar*$yvar)}]
     set res_var 0.0
     foreach xi $x yi $y {
-        set res_var [expr {$res_var + ($slp*$xi + $intrcpt - $yi)**2}] 
+        set res_var [expr {$res_var + ($slp*$xi + $intrcpt - $yi)**2}]
     }
     set res_var [expr {$res_var / $dof}]
-    ldot dx $dx
+    lmultiply dx $dx
     set slp_var [expr {$res_var / lsum($dx)}] ;# actually divide by dx**2
-    ldot x $x
+    lmultiply x $x
     set intrcpt_var [expr {$slp_var*lmean($x)}] ;# actually divide by x**2
     set slp_err [expr {sqrt($slp_var/$dof)}]
     set intrcpt_err [expr {sqrt($intrcpt_var/$dof)}]
     return [list $slp $intrcpt $slp_err $intrcpt_err $R2]
 }
+

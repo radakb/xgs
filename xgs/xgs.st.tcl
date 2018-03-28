@@ -139,7 +139,7 @@ proc ::xgs::computePairPotential {oldIndex newIndex} {
     set dT [expr {$oldTemp - $newTemp}]
     set dbeta [expr {$dT / ($::BOLTZMANN*$oldTemp*$newTemp)}]
     set U $::energyArray(POTENTIAL)
-    if {[constPresOn]} {
+    if {$::barostatIsSet} {
         set P [$::barostatPresCmd]
         set V $::energyArray(VOLUME)
         set U [expr {$U + $P*$V / $::PRESSUREFACTOR}]
@@ -166,7 +166,7 @@ proc ::xgs::computePairPotential {oldIndex newIndex} {
 proc ::xgs::computeNormedWeights {} {
     # Use the max log term as a shift during normalization.
     set U $::energyArray(POTENTIAL)
-    if {[constPresOn]} {
+    if {$::barostatIsSet} {
         set P [$::barostatPresCmd]  
         set V $::energyArray(VOLUME)
         set U [expr {$U + $P*$V / $::PRESSUREFACTOR}]
@@ -213,11 +213,11 @@ proc ::xgs::setupCalibration {} {
 proc ::xgs::accumulateCalibration {energyMeans index} {
     upvar 1 $energyMeans EnergyMeans
     set U $::energyArray(POTENTIAL)
-    if {[constPresOn]} {
+    if {$::barostatIsSet} {
         set P [$::barostatPresCmd]
         set V $::energyArray(VOLUME)
         set U [expr {$U + $P*$V / $::PRESSUREFACTOR}]
-    } 
+    }
     lincr EnergyMeans $index $U
     return
 }
